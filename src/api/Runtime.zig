@@ -3,15 +3,15 @@ const Styles = @import("../styles.zig");
 const Utils = @import("../utils.zig");
 const Chameleon = @This();
 
-open: std.ArrayList(u8),
-close: std.ArrayList(u8),
+open: std.ArrayList(u8) = .empty,
+close: std.ArrayList(u8) = .empty,
 preset: bool = false,
 allocator: std.mem.Allocator,
 no_color: bool,
 
 pub fn deinit(self: *Chameleon) void {
-    self.open.deinit();
-    self.close.deinit();
+    self.open.deinit(self.allocator);
+    self.close.deinit(self.allocator);
 }
 
 /// Returns the formatted text.
@@ -26,37 +26,62 @@ pub fn fmt(self: *Chameleon, comptime format: []const u8, args: anytype) ![]u8 {
     }
 }
 
-/// Print the formatted text to a `File` writer.
-pub fn print(self: *Chameleon, writer: std.fs.File.Writer, comptime format: []const u8, args: anytype) !void {
+/// Print the formatted text to an `Io` writer.
+pub fn print(self: *Chameleon, writer: *std.Io.Writer, comptime format: []const u8, args: anytype) !void {
     defer self.removeAll();
     try writer.writeAll(self.open.items);
     try writer.print(format, args);
     try writer.writeAll(self.close.items);
 }
 
+/// Print the formatted text to a buffered `File` writer.
+pub fn printFileBuffered(self: *Chameleon, file: std.fs.File, comptime format: []const u8, args: anytype) !void {
+    var buf: [1024]u8 = undefined;
+    var writer = file.writer(&buf);
+    try self.print(&writer.interface, format, args);
+    try writer.interface.flush();
+}
+
+/// Print the formatted text to buffered stdout.
+pub fn printOutBuffered(self: *Chameleon, comptime format: []const u8, args: anytype) !void {
+    return self.printFile(.stdout(), format, args);
+}
+
+/// Print the formatted text to buffered stderr.
+pub fn printErrBuffered(self: *Chameleon, comptime format: []const u8, args: anytype) !void {
+    return self.printFile(.stderr(), format, args);
+}
+
+/// Print the formatted text to a `File` writer.
+pub fn printFile(self: *Chameleon, file: std.fs.File, comptime format: []const u8, args: anytype) !void {
+    var writer = file.writer(&.{});
+    try self.print(&writer.interface, format, args);
+    try writer.interface.flush();
+}
+
 /// Print the formatted text to stdout.
 pub fn printOut(self: *Chameleon, comptime format: []const u8, args: anytype) !void {
-    return self.print(std.io.getStdOut().writer(), format, args);
+    return self.printFile(.stdout(), format, args);
 }
 
 /// Print the formatted text to stderr.
 pub fn printErr(self: *Chameleon, comptime format: []const u8, args: anytype) !void {
-    return self.print(std.io.getStdErr().writer(), format, args);
+    return self.printFile(.stderr(), format, args);
 }
 
 pub fn addStyle(self: *Chameleon, comptime style_name: []const u8) *Chameleon {
     if (!self.no_color) {
         const style = Utils.wrapStyle(@field(Styles, style_name));
-        self.open.appendSlice(style[0]) catch {};
-        self.close.appendSlice(style[1]) catch {};
+        self.open.appendSlice(self.allocator, style[0]) catch {};
+        self.close.appendSlice(self.allocator, style[1]) catch {};
     }
     return self;
 }
 
 fn removeAll(self: *Chameleon) void {
     if (self.preset) return;
-    self.open.clearAndFree();
-    self.close.clearAndFree();
+    self.open.clearAndFree(self.allocator);
+    self.close.clearAndFree(self.allocator);
 }
 
 pub fn reset(self: *Chameleon) *Chameleon {
@@ -250,8 +275,8 @@ pub fn bgWhiteBright(self: *Chameleon) *Chameleon {
 /// Set the foreground color to the rgb color values.
 pub fn rgb(self: *Chameleon, comptime r: u8, comptime g: u8, comptime b: u8) *Chameleon {
     if (!self.no_color) {
-        self.open.appendSlice(Utils.wrapAnsi16m(false, r, g, b)) catch {};
-        self.close.appendSlice("\u{001B}[39m") catch {};
+        self.open.appendSlice(self.allocator, Utils.wrapAnsi16m(false, r, g, b)) catch {};
+        self.close.appendSlice(self.allocator, "\u{001B}[39m") catch {};
     }
     return self;
 }
@@ -259,8 +284,8 @@ pub fn rgb(self: *Chameleon, comptime r: u8, comptime g: u8, comptime b: u8) *Ch
 /// Set the background color to the rgb color values.
 pub fn bgRgb(self: *Chameleon, comptime r: u8, comptime g: u8, comptime b: u8) *Chameleon {
     if (!self.no_color) {
-        self.open.appendSlice(Utils.wrapAnsi16m(true, r, g, b)) catch {};
-        self.close.appendSlice("\u{001B}[49m") catch {};
+        self.open.appendSlice(self.allocator, Utils.wrapAnsi16m(true, r, g, b)) catch {};
+        self.close.appendSlice(self.allocator, "\u{001B}[49m") catch {};
     }
     return self;
 }
@@ -297,8 +322,8 @@ pub fn bgHex(self: *Chameleon, comptime hex_code: []const u8) *Chameleon {
 pub inline fn createPreset(self: *Chameleon) !Chameleon {
     defer self.removeAll();
     return .{
-        .open = try self.open.clone(),
-        .close = try self.close.clone(),
+        .open = try self.open.clone(self.allocator),
+        .close = try self.close.clone(self.allocator),
         .preset = true,
         .allocator = self.allocator,
         .no_color = self.no_color,
@@ -308,8 +333,6 @@ pub inline fn createPreset(self: *Chameleon) !Chameleon {
 test createPreset {
     const allocator = std.testing.allocator;
     var cham = Chameleon{
-        .open = std.ArrayList(u8).init(allocator),
-        .close = std.ArrayList(u8).init(allocator),
         .allocator = allocator,
         .no_color = false,
     };
