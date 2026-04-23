@@ -31,7 +31,7 @@ pub fn main(init: std.process.Init) !void {
   var c = try Chameleon.initRuntime(.{ .allocator = std.heap.your_allocator });
   defer c.deinit();
   // `config.detect_no_color` is respected, `initRuntime` will only create an environment map if you enable detection.
-  try c.green().bold().printOut("Hello, world!", .{});
+  try c.green().bold().printOut(init.io, "Hello, world!", .{});
 }
 ```
 
@@ -47,7 +47,7 @@ pub fn main(init: std.process.Init) !void {
   var c = Chameleon.initRuntimeNoDetect(.{ .allocator = std.heap.your_allocator });
   defer c.deinit();
   c.no_color = true; // `config.detect_no_color` is ignored, implement your detection here.
-  try c.green().bold().printOut("Hello, world!", .{});
+  try c.green().bold().printOut(init.io, "Hello, world!", .{});
 }
 ```
 
@@ -63,7 +63,7 @@ pub fn main(init: std.process.Init) !void {
   var c = Chameleon.initRuntimeFromEnviron(.{ .allocator = std.heap.your_allocator }, init.environ_map);
   defer c.deinit();
   // `config.detect_no_color` is respected, and reads the `NO_COLOR` variable from `init.environ_map`.
-  try c.green().bold().printOut("Hello, world!", .{});
+  try c.green().bold().printOut(init.io, "Hello, world!", .{});
 }
 ```
 
