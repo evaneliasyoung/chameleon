@@ -23,13 +23,13 @@ pub fn initRuntime(config: Config) std.process.Environ.CreateMapError!RuntimeCha
     if (config.detect_no_color) {
         var environ_map = try std.process.Environ.createMap(.empty, config.allocator);
         defer environ_map.deinit();
-        return initRuntimeFromEnviron(config, *environ_map);
+        return initRuntimeFromEnviron(config, &environ_map);
     } else {
         return initRuntimeNoDetect(config);
     }
 }
 
-pub fn initRuntimeFromEnviron(config: Config, environ_map: *std.process.Environ.Map) RuntimeChameleon {
+pub fn initRuntimeFromEnviron(config: Config, environ_map: *const std.process.Environ.Map) RuntimeChameleon {
     return .{
         .allocator = config.allocator,
         .no_color = if (!config.detect_no_color) false else environ_map.contains("NO_COLOR"),
